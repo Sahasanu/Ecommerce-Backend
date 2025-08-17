@@ -1,103 +1,103 @@
 import db from "../../config/db.js";
 import cloudinary from '../../config/cloudinery.js';
 
-export const createProduct = async (req, res) => {
-  try {
-    const { name, description, price, category, stock } = req.body;
+  export const createProduct = async (req, res) => {
+    try {
+      const { name, description, price, category, stock } = req.body;
 
-    // Validate required fields
-    if (!name || !description || price === undefined) {
-      return res.status(400).json({ 
-        message: 'Missing required fields',
-        details: {
-          name: !name ? 'Name is required' : undefined,
-          description: !description ? 'Description is required' : undefined,
-          price: price === undefined ? 'Price is required' : undefined
+      // Validate required fields
+      if (!name || !description || price === undefined) {
+        return res.status(400).json({ 
+          message: 'Missing required fields',
+          details: {
+            name: !name ? 'Name is required' : undefined,
+            description: !description ? 'Description is required' : undefined,
+            price: price === undefined ? 'Price is required' : undefined
+          }
+        });
+      }
+
+      // Validate price is a positive number
+      const parsedPrice = parseFloat(price);
+      if (isNaN(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({ 
+          message: 'Price must be a positive number' 
+        });
+      }
+
+      // Validate stock if provided
+      let parsedStock = 0;
+      if (stock !== undefined) {
+        parsedStock = parseInt(stock);
+        if (isNaN(parsedStock) || parsedStock < 0) {
+          return res.status(400).json({ 
+            message: 'Stock must be a non-negative integer' 
+          });
+        }
+      }
+
+      // Handle image upload if present
+      let imageUrl = null;
+      if (req.file) {
+        try {
+          // Upload to Cloudinary
+          const result = await cloudinary.uploader.upload(req.file.path, {
+            folder: 'ecommerce_uploads'
+          });
+          imageUrl = result.secure_url;
+        } catch (uploadError) {
+          console.error('Cloudinary upload error:', uploadError);
+          return res.status(500).json({ 
+            message: 'Failed to upload product image' 
+          });
+        }
+      }
+
+      // Insert product
+      const [result] = await db.query(
+        'INSERT INTO products (name, description, price, category, stock, imageurl) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          name, 
+          description, 
+          parsedPrice, 
+          category || null, 
+          parsedStock,
+          imageUrl
+        ]
+      );
+
+      res.status(201).json({
+        message: 'Product created successfully',
+        product: {
+          id: result.insertId,
+          name,
+          description,
+          price: parsedPrice,
+          category: category || null,
+          stock: parsedStock,
+          imageUrl
         }
       });
-    }
 
-    // Validate price is a positive number
-    const parsedPrice = parseFloat(price);
-    if (isNaN(parsedPrice) || parsedPrice <= 0) {
-      return res.status(400).json({ 
-        message: 'Price must be a positive number' 
+    } catch (error) {
+      console.error('Error creating product:', error);
+      
+      // Cleanup uploaded image if DB operation failed
+      if (req.file && req.file.path) {
+        try {
+          const publicId = req.file.path.split('/').pop().split('.')[0];
+          await cloudinary.uploader.destroy(`ecommerce_uploads/${publicId}`);
+        } catch (e) {
+          console.error('Error cleaning up uploaded image:', e);
+        }
+      }
+      
+      res.status(500).json({ 
+        message: 'Server error while creating product',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
-
-    // Validate stock if provided
-    let parsedStock = 0;
-    if (stock !== undefined) {
-      parsedStock = parseInt(stock);
-      if (isNaN(parsedStock) || parsedStock < 0) {
-        return res.status(400).json({ 
-          message: 'Stock must be a non-negative integer' 
-        });
-      }
-    }
-
-    // Handle image upload if present
-    let imageUrl = null;
-    if (req.file) {
-      try {
-        // Upload to Cloudinary
-        const result = await cloudinary.uploader.upload(req.file.path, {
-          folder: 'ecommerce_uploads'
-        });
-        imageUrl = result.secure_url;
-      } catch (uploadError) {
-        console.error('Cloudinary upload error:', uploadError);
-        return res.status(500).json({ 
-          message: 'Failed to upload product image' 
-        });
-      }
-    }
-
-    // Insert product
-    const [result] = await db.query(
-      'INSERT INTO products (name, description, price, category, stock, image_url) VALUES (?, ?, ?, ?, ?, ?)',
-      [
-        name, 
-        description, 
-        parsedPrice, 
-        category || null, 
-        parsedStock,
-        imageUrl
-      ]
-    );
-
-    res.status(201).json({
-      message: 'Product created successfully',
-      product: {
-        id: result.insertId,
-        name,
-        description,
-        price: parsedPrice,
-        category: category || null,
-        stock: parsedStock,
-        imageUrl
-      }
-    });
-
-  } catch (error) {
-    console.error('Error creating product:', error);
-    
-    // Cleanup uploaded image if DB operation failed
-    if (req.file && req.file.path) {
-      try {
-        const publicId = req.file.path.split('/').pop().split('.')[0];
-        await cloudinary.uploader.destroy(`ecommerce_uploads/${publicId}`);
-      } catch (e) {
-        console.error('Error cleaning up uploaded image:', e);
-      }
-    }
-    
-    res.status(500).json({ 
-      message: 'Server error while creating product',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
+  };
 
 export const updateProduct = async (req, res) => {
   try {

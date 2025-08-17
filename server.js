@@ -1,11 +1,13 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { setupTables } from './src/config/setupTables.js';
-import { verifyToken, isAdmin, isUser } from './src/middlewares/AuthMiddleware.js';
+import { protectRoute } from './src/middlewares/AuthMiddleware.js';
 import adminRoutes from './src/routes/adminRoutes.js';
 import clientRoutes from './src/routes/clientRoutes.js';
 import publicRoutes from './src/routes/publicRoutes.js';
+import authRoutes from './src/routes/authRoutes.js';
 
 dotenv.config();
 const app = express();
@@ -13,17 +15,21 @@ const app = express();
 // CORS configuration
 const corsOptions = {
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
-app.use(cors(corsOptions));
 
 // Middleware
 app.use(express.json());
+app.use(cors(corsOptions));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser())
 
 // Routes
-app.use('/admin', verifyToken, isAdmin, adminRoutes);
-app.use('/user', verifyToken, isUser, clientRoutes);
+app.use('/admin', protectRoute, adminRoutes);
+app.use('/user', protectRoute, clientRoutes);
+app.use('/auth',  authRoutes);
 app.use('/', publicRoutes);
 
 // Error handling middleware
